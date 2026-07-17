@@ -1,0 +1,5 @@
+scenario_id,scenario_name,scenario_description,difficulty,status
+SCN-001,Outlet Cover,Removing an outlet cover,1,PUBLISHED
+SCN-002,Wire Pulling,Pulling wires through a wall,2,PUBLISHED
+SCN-003,Stuck Pipe,Loosening or tightening a stubborn stuck metal pipe under a sink,3,PUBLISHED
+SCN-004,Adjusting a Hex Nut,Adjusting a brass hex nut that does not match any standard wrenches,2,PUBLISHED

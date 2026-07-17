@@ -1,0 +1,5 @@
+tool_id,formal_name,common_name,use_description,family_id,location,difficulty,image_url,is_commonly_missed,status
+TOOL-001,Flathead Screwdriver,Flathead Screwdriver,Installs or removes slotted screws,1,Body,1,images/flathead_screwdriver.png,true,PUBLISHED
+TOOL-002,Fish Tape,Fish Tape,Used to pull wires through walls,3,Truck,1,images/fish_tape.png,true,PUBLISHED
+TOOL-003,Channel Locks,Tongue-and-Groove Pliers,to grip hold tighten or loosen pipes nuts and round objects,2,Toolbox,1,images/channel_locks.png,true,PUBLISHED
+TOOL-004,Adjustable Crescent Wrench,Adjustable Crescent Wrench,Used to tighten or loosen nuts and bolts,2,Toolbox,1,images/adjustable_crescent_wrenches.png,true,PUBLISHED

@@ -1,2 +1,0 @@
-# PWR_GEN_NR_JANKENY_TOOL_TRAINING
-Repo for Tool Training

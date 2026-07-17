@@ -1,0 +1,4 @@
+family_id,family_name,description,display_order, is_active
+1,Screwdrivers,Tools used to install and remove screws,1, true
+2,Pliers,Tools used to grip or cut materials,2, true
+3,Wire Pulling Tools,Tools used to pull wires through walls or conduits,3, true

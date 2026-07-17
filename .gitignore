@@ -1,0 +1,84 @@
+# ------------------------
+# Python
+# ------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Compiled extensions
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ------------------------
+# IDEs
+# ------------------------
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# ------------------------
+# Streamlit
+# ------------------------
+
+# Local secrets (keep out of Git)
+.streamlit/secrets.toml
+
+# Optional local config
+.streamlit/config.toml
+
+# ------------------------
+# Environment Variables
+# ------------------------
+.env
+.env.*
+
+# ------------------------
+# Python tooling
+# ------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ------------------------
+# Build artifacts
+# ------------------------
+build/
+dist/
+*.egg-info/
+
+# ------------------------
+# Logs
+# ------------------------
+*.log
+
+# ------------------------
+# Local databases
+# ------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.duckdb
+
+# ------------------------
+# Uploaded images
+# (only if users upload locally)
+# ------------------------
+uploads/
+
+# ------------------------
+# Temporary files
+# ------------------------
+tmp/
+temp/

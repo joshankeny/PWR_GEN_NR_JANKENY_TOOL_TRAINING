@@ -1,0 +1,5 @@
+scenario_id,tool_id,is_correct
+SCN-001,TOOL-001,true
+SCN-002,TOOL-002,true
+SCN-003,TOOL-003,true
+SCN-004,TOOL-004,true
