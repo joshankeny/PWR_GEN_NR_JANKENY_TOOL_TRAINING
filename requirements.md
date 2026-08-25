@@ -40,6 +40,12 @@ Provide an accessible, maintainable training platform that:
 
 ---
 
+# Resources
+
+Tool Sharepoint: https://cityoftacoma-my.sharepoint.com/:x:/r/personal/ewood_cityoftacoma_org/_layouts/15/Doc.aspx?sourcedoc=%7BDB9E98CA-04BB-4E3C-A83B-0810ABC1C30B%7D&file=Tools_Database_Setup.xlsx&fromShare=true&action=default&mobileredirect=true
+
+---
+
 # Functional Requirements
 
 ## Tool Library
