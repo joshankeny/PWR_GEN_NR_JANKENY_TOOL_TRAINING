@@ -485,8 +485,9 @@ def switch_learner() -> None:
 
 
 def initialize_flashcard_game(tool_ids: list[str]) -> None:
+    # The incoming list is already ordered using learner-specific adaptive
+    # weighting. Preserve that order rather than reshuffling it here.
     deck = tool_ids.copy()
-    random.shuffle(deck)
     st.session_state.deck = deck
     st.session_state.current_index = 0
     st.session_state.show_answer = False
@@ -557,8 +558,9 @@ def start_review_round() -> None:
 
 
 def initialize_multiple_choice_game(tool_ids: list[str]) -> None:
+    # The incoming list is already ordered using learner-specific adaptive
+    # weighting. Preserve that order rather than reshuffling it here.
     deck = tool_ids.copy()
-    random.shuffle(deck)
     st.session_state.mc_deck = deck
     st.session_state.mc_index = 0
     st.session_state.mc_score = 0
@@ -837,6 +839,122 @@ def submit_multiple_choice_answer(selected_answer: str, current_tool_id: str) ->
 
 
 # =========================================================
+# Adaptive learning / mastery
+# =========================================================
+
+
+def build_tool_learning_status(learner_id: str, tools: pd.DataFrame) -> pd.DataFrame:
+    """Return one row per tool with learner-specific mastery and selection weight.
+
+    Mastered requires:
+      * at least 3 attempts,
+      * at least 80% lifetime accuracy, and
+      * the learner's most recent attempt on that tool was successful.
+
+    Adaptive deck weights:
+      * needs review: 4x
+      * not yet practiced: 3x
+      * learning / not mastered: 2x
+      * mastered: 1x
+
+    The commonly-missed content flag adds a small additional boost so those
+    tools remain visible across learners.
+    """
+    status = tools[[
+        "tool_id", "formal_name", "family_name", "is_commonly_missed"
+    ]].copy()
+
+    attempts = get_learner_attempts(learner_id)
+    if attempts.empty:
+        status["attempts"] = 0
+        status["correct"] = 0
+        status["accuracy"] = 0.0
+        status["latest_correct"] = False
+    else:
+        attempts["is_correct"] = attempts["is_correct"].astype(int)
+
+        summary = (
+            attempts.groupby("tool_id")
+            .agg(
+                attempts=("attempt_id", "count"),
+                correct=("is_correct", "sum"),
+            )
+            .reset_index()
+        )
+        summary["accuracy"] = summary["correct"] / summary["attempts"] * 100
+
+        # get_learner_attempts is ordered newest first, so the first row for
+        # each tool is the most recent result.
+        latest = (
+            attempts.drop_duplicates(subset=["tool_id"], keep="first")
+            [["tool_id", "is_correct"]]
+            .rename(columns={"is_correct": "latest_correct"})
+        )
+
+        status = status.merge(summary, on="tool_id", how="left")
+        status = status.merge(latest, on="tool_id", how="left")
+        status["attempts"] = status["attempts"].fillna(0).astype(int)
+        status["correct"] = status["correct"].fillna(0).astype(int)
+        status["accuracy"] = status["accuracy"].fillna(0.0)
+        status["latest_correct"] = status["latest_correct"].fillna(False).astype(bool)
+
+    status["mastered"] = (
+        (status["attempts"] >= 3)
+        & (status["accuracy"] >= 80)
+        & status["latest_correct"]
+    )
+
+    # A recent miss immediately returns a practiced tool to review, even if
+    # its lifetime accuracy remains high. Low lifetime accuracy also qualifies.
+    status["needs_review"] = (
+        (status["attempts"] > 0)
+        & ((status["accuracy"] < 70) | (~status["latest_correct"]))
+    )
+
+    status["learning_state"] = "Learning"
+    status.loc[status["attempts"] == 0, "learning_state"] = "New"
+    status.loc[status["needs_review"], "learning_state"] = "Needs Review"
+    status.loc[status["mastered"], "learning_state"] = "Mastered"
+
+    status["selection_weight"] = 2.0
+    status.loc[status["attempts"] == 0, "selection_weight"] = 3.0
+    status.loc[status["needs_review"], "selection_weight"] = 4.0
+    status.loc[status["mastered"], "selection_weight"] = 1.0
+
+    # Keep globally commonly-missed tools slightly more prominent without
+    # overwhelming the learner-specific history.
+    status.loc[status["is_commonly_missed"], "selection_weight"] *= 1.25
+
+    return status
+
+
+def build_adaptive_deck(
+    learner_id: str,
+    candidate_tools: pd.DataFrame,
+    card_limit: int,
+) -> list[str]:
+    """Select tools without replacement using learner-specific weights."""
+    if candidate_tools.empty or card_limit <= 0:
+        return []
+
+    status = build_tool_learning_status(learner_id, candidate_tools)
+    remaining = status[["tool_id", "selection_weight"]].copy()
+    deck: list[str] = []
+    target = min(int(card_limit), len(remaining))
+
+    # Sequential weighted sampling gives a weighted deck with no duplicate
+    # tools in the same round.
+    while len(deck) < target and not remaining.empty:
+        ids = remaining["tool_id"].tolist()
+        weights = remaining["selection_weight"].astype(float).tolist()
+        chosen = random.choices(ids, weights=weights, k=1)[0]
+        deck.append(chosen)
+        remaining = remaining[remaining["tool_id"] != chosen]
+
+    return deck
+
+
+# =========================================================
 # Progress calculations and display
 # =========================================================
 
@@ -870,8 +988,24 @@ def build_progress_tables(learner_id: str, tools: pd.DataFrame) -> tuple[pd.Data
         .reset_index()
     )
     by_tool["accuracy"] = (by_tool["correct"] / by_tool["attempts"] * 100).round(0)
-    by_tool["mastered"] = (by_tool["attempts"] >= 3) & (by_tool["accuracy"] >= 80)
-    by_tool["needs_review"] = by_tool["accuracy"] < 70
+
+    latest_results = (
+        enriched.sort_values(["attempted_at", "attempt_id"], ascending=[False, False])
+        .drop_duplicates(subset=["tool_id"], keep="first")
+        [["tool_id", "is_correct"]]
+        .rename(columns={"is_correct": "latest_correct"})
+    )
+    by_tool = by_tool.merge(latest_results, on="tool_id", how="left")
+    by_tool["latest_correct"] = by_tool["latest_correct"].fillna(0).astype(bool)
+
+    by_tool["mastered"] = (
+        (by_tool["attempts"] >= 3)
+        & (by_tool["accuracy"] >= 80)
+        & by_tool["latest_correct"]
+    )
+    by_tool["needs_review"] = (
+        (by_tool["accuracy"] < 70) | (~by_tool["latest_correct"])
+    )
 
     by_family = (
         enriched.groupby("family_name", dropna=False)
@@ -1141,6 +1275,7 @@ if st.sidebar.button("Return Home", use_container_width=True):
 if st.session_state.mode == "flashcards":
     st.title("🧰 Tool Flashcards")
     st.write("Study the tool image and reveal the answer when ready. Your self-rating is saved to your learner history.")
+    st.caption("Adaptive practice: tools needing review appear most often; mastered tools remain in rotation at a lower rate.")
 
     if "deck" not in st.session_state:
         if filtered_tools.empty:
@@ -1149,9 +1284,12 @@ if st.session_state.mode == "flashcards":
 
         st.info(f"{len(filtered_tools)} published tool(s) match the current settings.")
         if st.button("Begin Flashcards", type="primary", use_container_width=True):
-            selected_ids = filtered_tools["tool_id"].tolist()
-            random.shuffle(selected_ids)
-            initialize_flashcard_game(selected_ids[: int(card_limit)])
+            selected_ids = build_adaptive_deck(
+                learner_id=st.session_state.learner_id,
+                candidate_tools=filtered_tools,
+                card_limit=int(card_limit),
+            )
+            initialize_flashcard_game(selected_ids)
             st.rerun()
         st.stop()
 
@@ -1222,6 +1360,7 @@ if st.session_state.mode == "flashcards":
 if st.session_state.mode == "multiple_choice":
     st.title("🧰 Multiple-Choice Tool Game")
     st.write("Answer questions about each tool. Every submitted answer is saved to this learner's history.")
+    st.caption("Adaptive practice: tools needing review appear most often; mastered tools remain in rotation at a lower rate.")
 
     if len(filtered_tools) < 2:
         st.warning("The multiple-choice game requires at least two published tools.")
@@ -1230,9 +1369,12 @@ if st.session_state.mode == "multiple_choice":
     if "mc_deck" not in st.session_state:
         st.info(f"{len(filtered_tools)} published tool(s) match the current settings.")
         if st.button("Begin Multiple Choice", type="primary", use_container_width=True):
-            selected_ids = filtered_tools["tool_id"].tolist()
-            random.shuffle(selected_ids)
-            initialize_multiple_choice_game(selected_ids[: int(card_limit)])
+            selected_ids = build_adaptive_deck(
+                learner_id=st.session_state.learner_id,
+                candidate_tools=filtered_tools,
+                card_limit=int(card_limit),
+            )
+            initialize_multiple_choice_game(selected_ids)
             st.rerun()
         st.stop()
 
